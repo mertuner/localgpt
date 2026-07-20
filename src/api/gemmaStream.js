@@ -51,19 +51,28 @@ export async function fetchWithStreaming(
   messages,
   { apiUrl = DEFAULT_API_URL, model = DEFAULT_MODEL, onToken, onSources, signal } = {},
 ) {
-  const response = await fetch(`${apiUrl}/v1/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    signal,
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.7,
-      top_p: 0.95,
-      max_tokens: 3000,
-      stream: true,
-    }),
-  });
+  let response;
+  try {
+    response = await fetch(`${apiUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal,
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: 0.7,
+        top_p: 0.95,
+        max_tokens: 3000,
+        stream: true,
+      }),
+    });
+  } catch (error) {
+    if (error.name === "AbortError") throw error;
+    // fetch rejects with a bare "Failed to fetch" for DNS failures, a dead
+    // host, and CORS rejections alike. Name the address so the message points
+    // somewhere -- a restarted tunnel changes hostname and lands here.
+    throw new Error(`Cannot reach the model server at ${apiUrl}. It may be offline or its address may have changed.`);
+  }
 
   if (!response.ok) {
     throw new Error(await describeFailure(response, apiUrl));
