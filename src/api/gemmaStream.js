@@ -13,6 +13,40 @@
 const DEFAULT_API_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 const DEFAULT_MODEL = import.meta.env.VITE_MODEL_ID || "google/gemma-4-E2B-it";
 
+/**
+ * Turns a failed response into something worth showing a human.
+ *
+ * A misconfigured deploy returns the host's HTML error page, not JSON, and
+ * dumping that raw into the UI is unreadable. Detect that case and say what
+ * actually needs fixing instead.
+ */
+async function describeFailure(response, apiUrl, { misrouted = false } = {}) {
+  const body = await response.text().catch(() => "");
+  const isHtml =
+    misrouted ||
+    (response.headers.get("content-type") || "").includes("text/html") ||
+    body.trimStart().toLowerCase().startsWith("<!doctype");
+
+  if (isHtml || !body.trim()) {
+    const where = apiUrl.startsWith("http") ? apiUrl : `${window.location.origin}${apiUrl}`;
+    // Both cases mean the same thing: the web host answered, not a model.
+    if (misrouted || response.status === 404) {
+      return `No model API at ${where} — the web host answered instead of a model server. Check VITE_API_BASE_URL or the /api proxy.`;
+    }
+    return `Model API at ${where} returned ${response.status} ${response.statusText}.`;
+  }
+
+  // A real API error (JSON or plain text) is worth surfacing verbatim.
+  try {
+    const json = JSON.parse(body);
+    const detail = json.error?.message || json.detail || json.message;
+    if (detail) return String(detail).slice(0, 300);
+  } catch {
+    // Not JSON; fall through to the raw text.
+  }
+  return body.slice(0, 300);
+}
+
 export async function fetchWithStreaming(
   messages,
   { apiUrl = DEFAULT_API_URL, model = DEFAULT_MODEL, onToken, signal } = {},
@@ -32,8 +66,14 @@ export async function fetchWithStreaming(
   });
 
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(detail?.slice(0, 300) || `API error: ${response.status} ${response.statusText}`);
+    throw new Error(await describeFailure(response, apiUrl));
+  }
+
+  // A 2xx does not mean we reached the model. An SPA fallback happily answers
+  // POST /api/... with 200 + index.html, which would otherwise parse as a
+  // stream containing zero tokens and fail silently as an empty reply.
+  if ((response.headers.get("content-type") || "").includes("text/html")) {
+    throw new Error(await describeFailure(response, apiUrl, { misrouted: true }));
   }
 
   const reader = response.body.getReader();
