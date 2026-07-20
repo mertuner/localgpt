@@ -6,20 +6,10 @@
   # Vite 5 requires Node 18+; pin so builds don't drift with Netlify defaults.
   NODE_VERSION = "20"
 
-# Proxy the API to the model server, so the browser only ever talks to this
-# origin. Keeps the default "/api" base working with no build-time env var and
-# no CORS. status = 200 makes this a proxy rather than a redirect.
-#
-# Must come BEFORE the SPA rule below: Netlify uses the first matching rule,
-# and "/*" would otherwise swallow these requests and return index.html.
-#
-# Update this when the tunnel hostname changes (quick tunnels get a new one on
-# every cloudflared restart) -- a named tunnel avoids the churn.
-[[redirects]]
-  from = "/api/*"
-  to = "https://leslie-steve-hours-football.trycloudflare.com/:splat"
-  status = 200
-  force = true
+# No /api proxy here on purpose. Netlify buffers server-sent events, which
+# delayed the first token by ~26s versus 0.34s calling the backend directly.
+# The browser therefore talks straight to VITE_API_BASE_URL (see .env.production)
+# and the backend sends CORS headers.
 
 # Single-page app: serve index.html for any path that isn't a real file,
 # so deep links and reloads don't 404.
