@@ -49,7 +49,7 @@ async function describeFailure(response, apiUrl, { misrouted = false } = {}) {
 
 export async function fetchWithStreaming(
   messages,
-  { apiUrl = DEFAULT_API_URL, model = DEFAULT_MODEL, onToken, signal } = {},
+  { apiUrl = DEFAULT_API_URL, model = DEFAULT_MODEL, onToken, onSources, signal } = {},
 ) {
   const response = await fetch(`${apiUrl}/v1/chat/completions`, {
     method: "POST",
@@ -81,6 +81,7 @@ export async function fetchWithStreaming(
   let buffer = "";
   let fullContent = "";
   let finishReason = null;
+  let sources = null;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -100,6 +101,15 @@ export async function fetchWithStreaming(
 
       try {
         const json = JSON.parse(data);
+
+        // Web-search grounding: `sources` rides on a chunk of its own,
+        // alongside `choices` and ahead of the first content token, so the UI
+        // can show references before the answer starts arriving.
+        if (Array.isArray(json.sources) && json.sources.length > 0) {
+          sources = json.sources;
+          onSources?.(sources);
+        }
+
         const token = json.choices?.[0]?.delta?.content;
         if (token) {
           fullContent += token;
@@ -114,7 +124,7 @@ export async function fetchWithStreaming(
     }
   }
 
-  return { content: fullContent, finishReason };
+  return { content: fullContent, finishReason, sources };
 }
 
 export async function fetchHealth(apiUrl = DEFAULT_API_URL) {

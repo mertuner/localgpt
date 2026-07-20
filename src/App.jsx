@@ -107,29 +107,26 @@ export default function App() {
     abortRef.current?.abort();
   }
 
-  async function handleSend(text, attachments) {
+  /**
+   * Streams one completion for `history` (which must end with a user message)
+   * and appends the assistant reply. Shared by sending and regenerating.
+   */
+  async function runCompletion(conversationId, history) {
     setError("");
-
-    let conversation = active;
-    if (!conversation) {
-      conversation = newConversation();
-      conversation.title = titleFor(text || attachments[0]?.name || "New chat");
-      setConversations((current) => [conversation, ...current]);
-      setActiveId(conversation.id);
-    }
-
-    const conversationId = conversation.id;
-    const userMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: text,
-      attachments,
-    };
     const assistantId = crypto.randomUUID();
 
-    const history = [...conversation.messages, userMessage];
     patchConversation(conversationId, () => ({
-      messages: [...history, { id: assistantId, role: "assistant", content: "", attachments: [] }],
+      messages: [
+        ...history,
+        {
+          id: assistantId,
+          role: "assistant",
+          content: "",
+          attachments: [],
+          sources: null,
+          createdAt: Date.now(),
+        },
+      ],
     }));
 
     pinnedToBottom.current = true;
@@ -151,6 +148,13 @@ export default function App() {
         // Prefer the id the server reports as loaded over the build-time default.
         ...(health.modelId ? { model: health.modelId } : {}),
         signal: controller.signal,
+        onSources: (sources) => {
+          patchConversation(conversationId, (current) => ({
+            messages: current.messages.map((message) =>
+              message.id === assistantId ? { ...message, sources } : message,
+            ),
+          }));
+        },
         onToken: (token) => {
           patchConversation(conversationId, (current) => ({
             messages: current.messages.map((message) =>
@@ -179,6 +183,64 @@ export default function App() {
       abortRef.current = null;
       setIsLoading(false);
     }
+  }
+
+  async function handleSend(text, attachments) {
+    let conversation = active;
+    if (!conversation) {
+      conversation = newConversation();
+      conversation.title = titleFor(text || attachments[0]?.name || "New chat");
+      setConversations((current) => [conversation, ...current]);
+      setActiveId(conversation.id);
+    }
+
+    const userMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: text,
+      attachments,
+      createdAt: Date.now(),
+    };
+
+    await runCompletion(conversation.id, [...conversation.messages, userMessage]);
+  }
+
+  /**
+   * Re-answers from a given message: drops it and everything after, then
+   * streams a fresh reply to the user turn that preceded it.
+   */
+  async function handleRetry(messageId) {
+    if (!active || isLoading) return;
+
+    const index = active.messages.findIndex((message) => message.id === messageId);
+    if (index === -1) return;
+
+    // Retrying a user message re-sends it; retrying a reply re-answers its prompt.
+    const end = active.messages[index].role === "user" ? index + 1 : index;
+    const history = active.messages.slice(0, end);
+
+    if (history.length === 0 || history[history.length - 1].role !== "user") return;
+    await runCompletion(active.id, history);
+  }
+
+  /** Forks the conversation into a new chat ending at this message. */
+  function handleBranch(messageId) {
+    if (!active) return;
+
+    const index = active.messages.findIndex((message) => message.id === messageId);
+    if (index === -1) return;
+
+    const messages = active.messages.slice(0, index + 1);
+    const firstUser = messages.find((message) => message.role === "user");
+    const branched = {
+      ...newConversation(),
+      title: titleFor(firstUser?.content || active.title),
+      messages,
+    };
+
+    setConversations((current) => [branched, ...current]);
+    setActiveId(branched.id);
+    pinnedToBottom.current = true;
   }
 
   return (
@@ -230,6 +292,9 @@ export default function App() {
                   key={message.id}
                   message={message}
                   isStreaming={isLoading && index === messages.length - 1 && message.role === "assistant"}
+                  isBusy={isLoading}
+                  onRetry={handleRetry}
+                  onBranch={handleBranch}
                 />
               ))}
             </div>

@@ -417,29 +417,54 @@ input {
 }
 
 .message-actions {
-  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 4px;
   opacity: 0;
   transition: opacity 0.15s ease;
 }
 
+/* User actions sit under a right-aligned bubble. */
+.message-user .message-actions {
+  justify-content: flex-end;
+  padding-right: 4px;
+}
+
 .message-assistant:hover .message-actions,
+.message-user:hover .message-actions,
 .message-actions:focus-within {
   opacity: 1;
 }
 
-.message-actions button {
-  padding: 5px 9px;
+.action-button {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 7px;
   background: transparent;
   color: var(--text-faint);
-  font-size: 0.8rem;
   cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
-.message-actions button:hover {
+.action-button:hover:not(:disabled) {
   background: var(--hover);
   color: var(--text);
+}
+
+.action-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.message-time {
+  margin-left: 4px;
+  font-size: 0.74rem;
+  color: var(--text-faint);
+  white-space: nowrap;
 }
 
 .caret {
@@ -567,6 +592,172 @@ input {
   font-size: 0.85rem;
   line-height: 1.55;
 }
+
+/* ---------- citations ---------- */
+
+.cite {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 2px;
+  vertical-align: super;
+  line-height: 0;
+}
+
+.cite a {
+  display: inline-grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 5px;
+  background: var(--bubble);
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.cite a:hover {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.sources {
+  margin-top: 12px;
+}
+
+.sources-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.sources-toggle:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* Overlapping cluster: each icon tucks under the previous one, and the ring
+   in the page background keeps them separable where they overlap. */
+.source-stack {
+  display: inline-flex;
+  align-items: center;
+}
+
+.source-stack > * {
+  margin-left: -7px;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+.source-stack > *:first-child {
+  margin-left: 0;
+}
+
+.source-icon-more {
+  display: grid;
+  place-items: center;
+  background: var(--bubble);
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.sources-chevron {
+  transition: transform 0.18s ease;
+}
+
+.sources-chevron-open {
+  transform: rotate(180deg);
+}
+
+.sources-list {
+  margin: 10px 0 0;
+  padding: 0 0 0 2px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.source-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.source-row:hover {
+  background: var(--hover);
+}
+
+.source-row-index {
+  min-width: 15px;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.source-row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.source-row-title {
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  /* Keep each source to one line so the list stays scannable. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-row:hover .source-row-title {
+  color: var(--text);
+}
+
+.source-row-host {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+.source-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  object-fit: cover;
+  flex-shrink: 0;
+  /* Favicons are often square with their own background; the circle mask and a
+     white backing keep dark-mode logos from disappearing. */
+  background: #fff;
+}
+
+.source-icon-fallback {
+  display: grid;
+  place-items: center;
+  background: var(--bubble);
+  color: var(--text-muted);
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
 
 /* ---------- composer ---------- */
 

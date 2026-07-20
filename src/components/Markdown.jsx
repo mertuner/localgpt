@@ -6,10 +6,40 @@ import { useState } from "react";
  * so model output is never injected as HTML.
  */
 
+// Order matters only for ties: the scan is left-to-right, so a `[1]` sitting
+// inside a code span is consumed by the backtick token first and stays literal.
+// Citation markers look like [3] or [3, 4] and are matched last so they cannot
+// shadow a real markdown link such as [text](url).
 const INLINE_PATTERN =
-  /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(\[[^\]]+\]\((?:https?:\/\/|\/)[^\s)]+\))/g;
+  /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(\[[^\]]+\]\((?:https?:\/\/|\/)[^\s)]+\))|(\[\s*\d+(?:\s*,\s*\d+)*\s*\])/g;
 
-function renderInline(text, keyPrefix) {
+function Citations({ indices, sources }) {
+  const known = indices
+    .map((n) => sources.find((source) => source.index === n))
+    .filter(Boolean);
+
+  // An index with no matching source would render as a dead link; leave the
+  // original text alone instead of inventing a reference.
+  if (known.length === 0) return null;
+
+  return (
+    <sup className="cite">
+      {known.map((source) => (
+        <a
+          key={source.index}
+          href={source.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={`${source.title}\n${source.url}`}
+        >
+          {source.index}
+        </a>
+      ))}
+    </sup>
+  );
+}
+
+function renderInline(text, keyPrefix, sources = null) {
   const nodes = [];
   let lastIndex = 0;
   let match;
@@ -21,7 +51,20 @@ function renderInline(text, keyPrefix) {
     const token = match[0];
     const key = `${keyPrefix}-${match.index}`;
 
-    if (token.startsWith("`")) {
+    const citation = /^\[\s*\d+(?:\s*,\s*\d+)*\s*\]$/.test(token);
+
+    if (citation) {
+      const indices = token.slice(1, -1).split(",").map((n) => Number(n.trim()));
+      const known = indices.filter((n) => sources?.some((s) => s.index === n));
+      // Keep the literal text when nothing resolves -- while the answer is
+      // still streaming the sources may not have arrived, and silently
+      // deleting what the model wrote would be worse than showing "[3, 4]".
+      if (known.length > 0) {
+        nodes.push(<Citations key={key} indices={known} sources={sources} />);
+      } else {
+        nodes.push(token);
+      }
+    } else if (token.startsWith("`")) {
       nodes.push(<code key={key} className="md-code">{token.slice(1, -1)}</code>);
     } else if (token.startsWith("**")) {
       nodes.push(<strong key={key}>{token.slice(2, -2)}</strong>);
@@ -68,7 +111,7 @@ function CodeBlock({ language, code }) {
   );
 }
 
-export default function Markdown({ content }) {
+export default function Markdown({ content, sources = null }) {
   const blocks = [];
   const lines = content.split("\n");
   let index = 0;
@@ -81,7 +124,7 @@ export default function Markdown({ content }) {
     blocks.push(
       <Tag key={`list-${blocks.length}`} className="md-list">
         {items.map((item, itemIndex) => (
-          <li key={itemIndex}>{renderInline(item, `li-${blocks.length}-${itemIndex}`)}</li>
+          <li key={itemIndex}>{renderInline(item, `li-${blocks.length}-${itemIndex}`, sources)}</li>
         ))}
       </Tag>,
     );
@@ -115,7 +158,7 @@ export default function Markdown({ content }) {
       const Tag = `h${Math.min(heading[1].length + 2, 6)}`;
       blocks.push(
         <Tag key={`h-${blocks.length}`} className="md-heading">
-          {renderInline(heading[2], `h-${blocks.length}`)}
+          {renderInline(heading[2], `h-${blocks.length}`, sources)}
         </Tag>,
       );
       index += 1;
@@ -140,7 +183,7 @@ export default function Markdown({ content }) {
       flushList();
       blocks.push(
         <blockquote key={`q-${blocks.length}`} className="md-quote">
-          {renderInline(quote[1], `q-${blocks.length}`)}
+          {renderInline(quote[1], `q-${blocks.length}`, sources)}
         </blockquote>,
       );
       index += 1;
@@ -169,7 +212,7 @@ export default function Markdown({ content }) {
     }
     blocks.push(
       <p key={`p-${blocks.length}`} className="md-p">
-        {renderInline(paragraph.join("\n"), `p-${blocks.length}`)}
+        {renderInline(paragraph.join("\n"), `p-${blocks.length}`, sources)}
       </p>,
     );
   }
