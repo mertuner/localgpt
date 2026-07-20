@@ -1,0 +1,12 @@
+node_modules/
+dist/
+
+# Local env files -- .env.example is committed, real ones are not.
+.env
+.env.local
+.env.*.local
+
+# Editor / agent tooling
+.claude/
+.DS_Store
+*.log

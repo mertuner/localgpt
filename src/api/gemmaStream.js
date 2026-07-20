@@ -1,0 +1,84 @@
+/**
+ * Streaming client for the OpenAI-compatible endpoint.
+ *
+ * The base URL is relative ("/api") by default so requests are same-origin:
+ * in dev the Vite proxy forwards them, in production the reverse proxy in
+ * front of the static build does. An absolute 127.0.0.1 URL would break every
+ * client that is not the machine running the model (phones included).
+ *
+ * Set VITE_API_BASE_URL to point at a different origin -- note that a
+ * cross-origin backend must send CORS headers.
+ */
+
+const DEFAULT_API_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+const DEFAULT_MODEL = import.meta.env.VITE_MODEL_ID || "google/gemma-4-E2B-it";
+
+export async function fetchWithStreaming(
+  messages,
+  { apiUrl = DEFAULT_API_URL, model = DEFAULT_MODEL, onToken, signal } = {},
+) {
+  const response = await fetch(`${apiUrl}/v1/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: 0.7,
+      top_p: 0.95,
+      max_tokens: 3000,
+      stream: true,
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(detail?.slice(0, 300) || `API error: ${response.status} ${response.statusText}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let fullContent = "";
+  let finishReason = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    // Carry the remainder forward: SSE events can be split across chunks.
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line.startsWith("data:")) continue;
+
+      const data = line.slice(5).trim();
+      if (data === "[DONE]") continue;
+
+      try {
+        const json = JSON.parse(data);
+        const token = json.choices?.[0]?.delta?.content;
+        if (token) {
+          fullContent += token;
+          onToken?.(token);
+        }
+        if (json.choices?.[0]?.finish_reason) {
+          finishReason = json.choices[0].finish_reason;
+        }
+      } catch {
+        // Ignore keep-alives and partial JSON.
+      }
+    }
+  }
+
+  return { content: fullContent, finishReason };
+}
+
+export async function fetchHealth(apiUrl = DEFAULT_API_URL) {
+  const response = await fetch(`${apiUrl}/health`);
+  if (!response.ok) throw new Error("Could not reach the local model.");
+  return response.json();
+}
