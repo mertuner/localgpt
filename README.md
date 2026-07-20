@@ -79,6 +79,31 @@ requires a rebuild.
 The app prefers whatever `model_id` `/health` reports over `VITE_MODEL_ID`, so
 the requested model cannot drift from the one actually loaded.
 
+### Keeping development local
+
+Vite loads env files per **mode**, so dev and production can use different
+backends with no code change:
+
+| File | Loaded by |
+| --- | --- |
+| `.env` | both — **avoid for the API URL** |
+| `.env.development[.local]` | `npm run dev` |
+| `.env.production[.local]` | `npm run build` |
+
+Put a remote or tunnel URL in `.env.production.local`, never in `.env`:
+
+```bash
+# .env.production.local  (gitignored)
+VITE_API_BASE_URL=https://your-tunnel.trycloudflare.com
+```
+
+`npm run dev` then ignores it and falls back to `/api` → the Vite proxy →
+`127.0.0.1:8000`, so local development never leaves the machine. Only
+`npm run build` bakes in the remote URL.
+
+Anything ending in `.local` is gitignored — which matters for quick tunnels,
+whose hostname changes on every `cloudflared` restart.
+
 ## Deployment
 
 `npm run build` emits a static bundle to `dist/`. Serve it behind a reverse
