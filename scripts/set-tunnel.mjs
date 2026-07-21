@@ -66,12 +66,12 @@ for (const file of ENV_FILES) {
 }
 
 if (!push) {
-  console.log(`\n  Not pushed. Review, then:\n    git commit -am "Point at the current quick tunnel" && git push\n`);
+  console.log(`\n  Not pushed. Review, then:\n    git commit -am "Point at a new backend URL" && git push\n`);
   process.exit(0);
 }
 
 console.log("\n  Committing and pushing ...");
 execSync(`git add ${ENV_FILES.join(" ")}`, { stdio: "inherit" });
-execSync(`git commit -m "Point at the current quick tunnel"`, { stdio: "inherit" });
+execSync(`git commit -m "Point at a new backend URL"`, { stdio: "inherit" });
 execSync("git push", { stdio: "inherit" });
 console.log("\n  Pushed. Netlify redeploys in ~30s.\n");
