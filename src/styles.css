@@ -542,6 +542,12 @@ input {
   text-underline-offset: 3px;
 }
 
+/* A bare URL is its own label, so it can be long. Let it break anywhere rather
+   than push the thread sideways on a phone. */
+.md-autolink {
+  overflow-wrap: anywhere;
+}
+
 .md-code {
   padding: 2px 5px;
   border-radius: 5px;

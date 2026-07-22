@@ -10,8 +10,46 @@ import { useState } from "react";
 // inside a code span is consumed by the backtick token first and stays literal.
 // Citation markers look like [3] or [3, 4] and are matched last so they cannot
 // shadow a real markdown link such as [text](url).
+// The last alternative autolinks bare URLs, which is how the model usually
+// emits them. A URL inside [text](url) never reaches it: the link alternative
+// matches first at the "[" and consumes the whole thing. Same for code spans.
 const INLINE_PATTERN =
-  /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(\[[^\]]+\]\((?:https?:\/\/|\/)[^\s)]+\))|(\[\s*\d+(?:\s*,\s*\d+)*\s*\])/g;
+  /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(\[[^\]]+\]\((?:https?:\/\/|\/)[^\s)]+\))|(\[\s*\d+(?:\s*,\s*\d+)*\s*\])|((?:https?:\/\/|www\.)[^\s<>"'`]+)/g;
+
+/**
+ * Splits trailing characters that punctuate the sentence rather than belong to
+ * the URL: "see https://x.com/a." or "(https://x.com/a)". Closing brackets are
+ * only trimmed when unbalanced, so Wikipedia-style /Foo_(bar) URLs survive.
+ */
+function splitUrlTail(raw) {
+  let url = raw;
+  let tail = "";
+
+  while (url.length > 0) {
+    const last = url[url.length - 1];
+
+    if (".,;:!?".includes(last)) {
+      tail = last + tail;
+      url = url.slice(0, -1);
+      continue;
+    }
+
+    if (last === ")" || last === "]" || last === "}") {
+      const open = { ")": "(", "]": "[", "}": "{" }[last];
+      const opens = url.split(open).length - 1;
+      const closes = url.split(last).length - 1;
+      if (closes > opens) {
+        tail = last + tail;
+        url = url.slice(0, -1);
+        continue;
+      }
+    }
+
+    break;
+  }
+
+  return [url, tail];
+}
 
 function Citations({ indices, sources }) {
   const known = indices
@@ -70,6 +108,21 @@ function renderInline(text, keyPrefix, sources = null) {
       nodes.push(<strong key={key}>{token.slice(2, -2)}</strong>);
     } else if (token.startsWith("*")) {
       nodes.push(<em key={key}>{token.slice(1, -1)}</em>);
+    } else if (/^(?:https?:\/\/|www\.)/.test(token)) {
+      const [url, tail] = splitUrlTail(token);
+      nodes.push(
+        <a
+          key={key}
+          className="md-autolink"
+          href={url.startsWith("www.") ? `https://${url}` : url}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {url}
+        </a>,
+      );
+      // Whatever was punctuation goes back as plain text.
+      if (tail) nodes.push(tail);
     } else {
       const split = token.indexOf("](");
       const label = token.slice(1, split);
